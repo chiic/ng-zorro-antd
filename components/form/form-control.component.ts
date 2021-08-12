@@ -8,7 +8,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  ContentChild,
+  ContentChildren,
   ElementRef,
   Host,
   Input,
@@ -16,6 +16,7 @@ import {
   OnDestroy,
   OnInit,
   Optional,
+  QueryList,
   Renderer2,
   SimpleChanges,
   TemplateRef,
@@ -76,6 +77,7 @@ export class NzFormControlComponent implements OnChanges, OnDestroy, OnInit, Aft
 
   private _hasFeedback = false;
   private validateChanges: Subscription = Subscription.EMPTY;
+  private contentChildChanges: Subscription = Subscription.EMPTY;
   private validateString: string | null = null;
   private destroyed$ = new Subject<void>();
   private localeId!: string;
@@ -92,7 +94,9 @@ export class NzFormControlComponent implements OnChanges, OnDestroy, OnInit, Aft
   iconType: typeof iconTypeMap[keyof typeof iconTypeMap] | null = null;
   innerTip: string | TemplateRef<{ $implicit: AbstractControl | NgModel }> | null = null;
 
-  @ContentChild(NgControl, { static: false }) defaultValidateControl?: FormControlName | FormControlDirective;
+  @ContentChildren(NgControl, { descendants: true }) defaultValidateControlContent?: QueryList<
+    FormControlName | FormControlDirective
+  >;
   @Input() nzSuccessTip?: string | TemplateRef<{ $implicit: AbstractControl | NgModel }>;
   @Input() nzWarningTip?: string | TemplateRef<{ $implicit: AbstractControl | NgModel }>;
   @Input() nzErrorTip?: string | TemplateRef<{ $implicit: AbstractControl | NgModel }>;
@@ -277,12 +281,27 @@ export class NzFormControlComponent implements OnChanges, OnDestroy, OnInit, Aft
   }
 
   ngAfterContentInit(): void {
-    if (!this.validateControl && !this.validateString) {
-      if (this.defaultValidateControl instanceof FormControlDirective) {
-        this.nzValidateStatus = this.defaultValidateControl.control;
-      } else {
-        this.nzValidateStatus = this.defaultValidateControl!;
-      }
+    const validateControl = this.defaultValidateControlContent!.get(0);
+    if (validateControl) {
+      this.changeValidHandler(validateControl);
+    } else {
+      this.contentChildChanges.unsubscribe();
+      this.contentChildChanges = this.defaultValidateControlContent!.changes.subscribe(
+        (res: QueryList<FormControlName | FormControlDirective>) => {
+          const firstContent = res.get(0);
+          if (firstContent) {
+            this.changeValidHandler(firstContent);
+          }
+        }
+      );
+    }
+  }
+
+  changeValidHandler(validateControl: FormControlName | FormControlDirective): void {
+    if (validateControl instanceof FormControlDirective) {
+      this.nzValidateStatus = validateControl.control;
+    } else {
+      this.nzValidateStatus = validateControl;
     }
   }
 }
